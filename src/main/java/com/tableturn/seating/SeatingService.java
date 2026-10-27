@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,7 @@ import com.tableturn.error.NoSuchTable;
 import com.tableturn.error.NotLeftYet;
 import com.tableturn.error.TableNotCleared;
 import com.tableturn.error.TableTooSmall;
+import com.tableturn.party.EventLog;
 import com.tableturn.party.PartyIds;
 import com.tableturn.party.PartyRepository;
 import com.tableturn.party.PartyService;
@@ -36,26 +38,27 @@ public class SeatingService {
     private final PartyService partyService;
     private final SeatingRepository seatings;
     private final Clock clock;
+    private final EventLog events;
 
     public SeatingService(
             BranchRepository branches,
             TableRepository tables,
             PartyRepository parties,
             PartyService partyService,
-            SeatingRepository seatings,
-            Clock clock) {
+            SeatingRepository seatings,Clock clock, EventLog events) {
         this.branches = branches;
         this.tables = tables;
         this.parties = parties;
         this.partyService = partyService;
         this.seatings = seatings;
         this.clock = clock;
+        this.events = events;
     }
 
     /**
      * The checks run in the ticket's order and the first failure wins:
      * party exists, table exists, party not already seated, table cleared,
-     * table fits. All the writes are one transaction.
+     * table fits. All the writes, the `seated` event among them, are one transaction.
      */
     @Transactional
     public SeatingResponse seat(String branch, String partyId, String tableNo) {
@@ -89,6 +92,16 @@ public class SeatingService {
         int waited = partyService.stampWait(
                 party.id(), party.joinedAt(), now);
 
+        events.append(
+                branchId,
+                party.id(),
+                seating,
+                "seated",
+                now,
+                Map.of(
+                        "table", tableNo,
+                        "waitedMinutes", waited));
+
         return new SeatingResponse(
                 SeatingIds.format(seating), partyId, tableNo, now, waited);
     }
@@ -109,12 +122,21 @@ public class SeatingService {
 
         seatings.leave(seating.id(), now);
         parties.markLeft(seating.partyId());
+
+        events.append(
+                seating.branchId(),
+                seating.partyId(),
+                seating.id(),
+                "left",
+                now,
+                Map.of());
+
         return new LeaveResponse(seatingId, now);
     }
 
     /**
-     * The server wipes the table: the seating, the table and the party change together or not at all. The turn is
-     * seated to left - what the table earned - not seated to cleared.
+     * The server wipes the table: the seating, the table and the party change together or not at all.
+     * The turn is seated to left - what the table earned - not seated to cleared.
      */
     @Transactional
     public ClearResponse clear(String branch, String seatingId) {
@@ -136,6 +158,14 @@ public class SeatingService {
         seatings.clear(seating.id(), now, turn);
         tables.clear(seating.tableId(), now);
         parties.markCleared(seating.partyId());
+
+        events.append(
+                seating.branchId(),
+                seating.partyId(),
+                seating.id(),
+                "cleared",
+                now,
+                Map.of("turnMinutes", turn));
 
         return new ClearResponse(
                 seatingId, seating.table(), turn, now);

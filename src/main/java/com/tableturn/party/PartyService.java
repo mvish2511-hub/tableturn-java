@@ -5,8 +5,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.tableturn.config.TableTurnSettings;
 import com.tableturn.error.NoSuchParty;
@@ -26,25 +28,30 @@ public class PartyService {
     private final PartyRepository parties;
     private final Clock clock;
     private final TableTurnSettings settings;
+    private final EventLog events;
 
     public PartyService(
             BranchRepository branches,
             TableRepository tables,
             PartyRepository parties,
             Clock clock,
-            TableTurnSettings settings) {
+            TableTurnSettings settings,
+            EventLog events) {
         this.branches = branches;
         this.tables = tables;
         this.parties = parties;
         this.clock = clock;
         this.settings = settings;
+        this.events = events;
     }
 
     /**
      * A party no table in the branch could ever seat is refused before
      * anything is written. The quote is the default-quote-minutes setting,
-     * stored with the moment the party joined.
+     * stored with the moment the party joined; the join and its two events are one
+     * transaction.
      */
+    @Transactional
     public JoinResponse join(String branch, String name, int covers, String phone) {
         long branchId = branchId(branch);
 
@@ -63,6 +70,10 @@ public class PartyService {
                 now,
                 settings.defaultQuoteMinutes()
         );
+
+        events.append(branchId, id, null, "joined", now, Map.of("covers", covers));
+        events.append(branchId, id, null, "quoted", now,
+                Map.of("quotedMinutes", settings.defaultQuoteMinutes()));
 
         PartyRepository.Row row = parties.find(branchId, id).orElseThrow();
 
@@ -97,7 +108,8 @@ public class PartyService {
                 row.quotedMinutes(),
                 row.quotedAt(),
                 row.waitedMinutes(),
-                row.table()
+                row.table(),
+                events.forParty(row.id())
         );
     }
 

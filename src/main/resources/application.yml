@@ -12,4 +12,5 @@ server:
   port: 8080
 
 default-quote-minutes: 40
+small-party-upgrade: when_nobody_larger_waits
 seed-dir: seed

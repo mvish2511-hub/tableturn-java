@@ -42,8 +42,7 @@ class ApiDocsTest {
     @Test
     void anUnexpectedErrorIsAGeneric500WithARequestId() throws Exception {
         doThrow(new IllegalStateException("the kitchen is on fire"))
-                .when(parties)
-                .party(anyString(), anyString());
+        .when(parties).party(anyString());
 
         http.perform(get("/parties/W001"))
                 .andExpect(status().isInternalServerError())

@@ -2,7 +2,6 @@ package com.tableturn.party;
 
 import java.time.Instant;
 import java.util.Optional;
-
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -23,7 +22,6 @@ public class PartyRepository {
     }
 
     private final JdbcClient jdbc;
-
     public PartyRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
@@ -57,6 +55,25 @@ public class PartyRepository {
                         LEFT JOIN tables t ON t.id = s.table_id
                         WHERE p.branch_id = ? AND p.id = ?
                         """).params(branchId, id).query(Row.class)
+                .optional();
+    }
+   
+    /**
+     * The first party still waiting that has more covers than this one and would fit a table of these seats.
+     */
+    public Optional<Long> firstLargerWaiting(long branchId, int covers, int seats) {
+        return jdbc.sql(
+                        """
+                        SELECT id
+                        FROM parties
+                        WHERE branch_id = ?
+                        AND state = 'waiting'
+                        AND covers > ?
+                        AND covers <= ?
+                        ORDER BY joined_at, id
+                        LIMIT 1""")
+                .params(branchId, covers, seats)
+                .query(Long.class)
                 .optional();
     }
 

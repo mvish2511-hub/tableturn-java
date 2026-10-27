@@ -9,7 +9,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * @param defaultQuoteMinutes the wait every party is quoted when it joins the list
  * @param seedDir              the folder that holds tables.csv
+ * @param smallPartyUpgrade           whether a party may take a table with more seats than covers
  */
 @ConfigurationProperties
-public record TableTurnSettings(@DefaultValue("40") int defaultQuoteMinutes, @DefaultValue("seed") String seedDir ){
+public record TableTurnSettings(@DefaultValue("40") int defaultQuoteMinutes, @DefaultValue("seed") String seedDir,
+@DefaultValue("when_nobody_larger_waits") SmallPartyUpgrade smallPartyUpgrade ){
 }

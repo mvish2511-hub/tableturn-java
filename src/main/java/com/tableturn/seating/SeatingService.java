@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.tableturn.config.TableTurnSettings;
 import com.tableturn.error.AlreadyCleared;
 import com.tableturn.error.AlreadyLeft;
 import com.tableturn.error.AlreadySeated;
@@ -16,6 +17,7 @@ import com.tableturn.error.NoSuchParty;
 import com.tableturn.error.NoSuchSeating;
 import com.tableturn.error.NoSuchTable;
 import com.tableturn.error.NotLeftYet;
+import com.tableturn.error.Overtaking;
 import com.tableturn.error.TableNotCleared;
 import com.tableturn.error.TableTooSmall;
 import com.tableturn.party.EventLog;
@@ -39,13 +41,17 @@ public class SeatingService {
     private final SeatingRepository seatings;
     private final Clock clock;
     private final EventLog events;
+    private final TableTurnSettings settings;
 
     public SeatingService(
             BranchRepository branches,
             TableRepository tables,
             PartyRepository parties,
             PartyService partyService,
-            SeatingRepository seatings,Clock clock, EventLog events) {
+            SeatingRepository seatings,
+            Clock clock,
+            EventLog events,
+            TableTurnSettings settings) {
         this.branches = branches;
         this.tables = tables;
         this.parties = parties;
@@ -53,12 +59,12 @@ public class SeatingService {
         this.seatings = seatings;
         this.clock = clock;
         this.events = events;
+        this.settings = settings;
     }
 
     /**
-     * The checks run in the ticket's order and the first failure wins:
-     * party exists, table exists, party not already seated, table cleared,
-     * table fits. All the writes, the `seated` event among them, are one transaction.
+     * Seated, table cleared, table fits - and then, for a table with more seats than covers, the upgrade rule.
+     * All the writes, the `seated` event among them, are one transaction.
      */
     @Transactional
     public SeatingResponse seat(String branch, String partyId, String tableNo) {
@@ -81,6 +87,9 @@ public class SeatingService {
 
         if (table.seats() < party.covers()) {
             throw new TableTooSmall(tableNo, table.seats(), party.covers());
+        }
+        if (table.seats() > party.covers()) {
+            upgrade(branchId, party.covers(), table.seats(), tableNo);
         }
 
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
@@ -169,6 +178,24 @@ public class SeatingService {
 
         return new ClearResponse(
                 seatingId, seating.table(), turn, now);
+    }
+
+    /**
+     * May this party take a table with more seats than covers? SMALL_PARTY_UPGRADE decides.
+     */
+    private void upgrade(long branchId, int covers, int seats, String tableNo) {
+        switch (settings.smallPartyUpgrade()) {
+            case never -> throw new Overtaking(tableNo, null);
+            case when_nobody_larger_waits -> {
+                Long larger = parties.firstLargerWaiting(branchId, covers, seats).orElse(null);
+                if (larger != null) {
+                    throw new Overtaking(tableNo, PartyIds.format(larger));
+                }
+            }
+            case always -> {
+                // any party may take any table it fits
+            }
+        }
     }
 
     private SeatingRepository.Row seating(String branch, String seatingId) {

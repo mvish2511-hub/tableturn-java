@@ -24,42 +24,56 @@ public class TableService {
         this.clock = clock;
     }
 
-    /** The floor, optionally only one section and/or one state; `free` counts the free tables among those shown. */
+    /** The floor, optionally only one section and/or one state; free counts the free tables among those shown. */
     public FloorView floor(String branch, Section section, TableState state) {
-    List<TableView> shown = tables.all(branchId(branch)).stream()
-            .map(this::view)
-                            .filter(t -> section == null || t.section().equals(section.name()))
+        long branchId = branches.idOf(branch)
+                .orElseThrow(() -> new NoSuchBranch(branch));
+
+        List<TableView> shown = tables.all(branchId).stream()
+                .map(this::view)
+                .filter(t -> section == null || t.section().equals(section.name()))
                 .filter(t -> state == null || t.state() == state)
-            .toList();
+                .toList();
 
-    int free = (int) shown.stream()
-            .filter(t -> t.state() == TableState.free)
-            .count();
+        int free = (int) shown.stream()
+                .filter(t -> t.state() == TableState.free)
+                .count();
 
-    return new FloorView(branch, free, shown);
-}
-
-    public TableView table(String branch, String no) {
-        return view(tables.one(branchId(branch), no).orElseThrow(() -> new NoSuchTable(branch, no)));
+        return new FloorView(branch, free, shown);
     }
 
-    private long branchId(String branch) {
-        return branches.idOf(branch).orElseThrow(() -> new NoSuchBranch(branch));
+    public TableView table(String branch, String no) {
+        long branchId = branches.idOf(branch)
+                .orElseThrow(() -> new NoSuchBranch(branch));
+
+        return view(tables.one(branchId, no)
+                .orElseThrow(() -> new NoSuchTable(branch, no)));
     }
 
     /**
-     * Derived on every read: free when no seating is current, seated while one is, with the
-     * minutes the party has sat counted from the clock.
+     * Derived on every read: free when no seating is current; uncleared once its party has left;
+     * seated while the party is still there, with the minutes it has sat counted from the clock.
      */
     private TableView view(TableRepository.Row row) {
         if (row.currentSeatingId() == null) {
-            return new TableView(row.no(), row.seats(), row.section().name(), TableState.free, null, null);
+            return new TableView(
+                    row.no(), row.seats(), row.section().name(),
+                    TableState.free, null, null);
         }
 
-        int seatedMinutes = (int) Duration.between(row.seatedAt(), clock.instant()).toMinutes();
+        if (row.leftAt() != null) {
+            return new TableView(
+                    row.no(), row.seats(), row.section().name(),
+                    TableState.uncleared, null, null);
+        }
 
-        return new TableView(row.no(), row.seats(), row.section().name(),
-       TableState.seated, PartyIds.format(row.partyId()),
-       seatedMinutes);
+        int seatedMinutes = (int) Duration.between(
+                row.seatedAt(), clock.instant()).toMinutes();
+
+        return new TableView(
+                row.no(), row.seats(), row.section().name(),
+                TableState.seated,
+                PartyIds.format(row.partyId()),
+                seatedMinutes);
     }
 }

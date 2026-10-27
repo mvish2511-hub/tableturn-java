@@ -1,6 +1,7 @@
 package com.tableturn.seating;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -8,7 +9,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 
-/**Seating. There is one branch, Baner. Parses the request and delegates; no rules live here.*/
+/**
+ * Seating. There is one branch, Baner.
+ * Parses the request and delegates; no rules live here.
+ */
 @RestController
 public class SeatingController {
 
@@ -24,5 +28,15 @@ public class SeatingController {
     @ResponseStatus(HttpStatus.CREATED)
     public SeatingResponse seat(@Valid @RequestBody SeatRequest body) {
         return seatings.seat(BRANCH, body.partyId(), body.table());
+    }
+
+    @PostMapping("/seatings/{seatingId}/leave")
+    public LeaveResponse leave(@PathVariable String seatingId) {
+        return seatings.leave(BRANCH, seatingId);
+    }
+
+    @PostMapping("/seatings/{seatingId}/clear")
+    public ClearResponse clear(@PathVariable String seatingId) {
+        return seatings.clear(BRANCH, seatingId);
     }
 }

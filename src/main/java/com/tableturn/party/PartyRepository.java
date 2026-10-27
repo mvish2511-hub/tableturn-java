@@ -56,14 +56,24 @@ public class PartyRepository {
                         LEFT JOIN seatings s ON s.party_id = p.id
                         LEFT JOIN tables t ON t.id = s.table_id
                         WHERE p.branch_id = ? AND p.id = ?
-                        """)
-                .params(branchId, id)
-                .query(Row.class)
+                        """).params(branchId, id).query(Row.class)
                 .optional();
     }
 
     public void markSeated(long id) {
         jdbc.sql("UPDATE parties SET state = 'seated' WHERE id = ?")
+                .param(id)
+                .update();
+    }
+
+    public void markLeft(long id) {
+        jdbc.sql("UPDATE parties SET state = 'left' WHERE id = ?")
+                .param(id)
+                .update();
+    }
+
+    public void markCleared(long id) {
+        jdbc.sql("UPDATE parties SET state = 'cleared' WHERE id = ?")
                 .param(id)
                 .update();
     }

@@ -12,15 +12,15 @@ import org.springframework.stereotype.Repository;
 public class TableRepository {
 
     /**
-     * One tables row: its number, its seats, its section and the seating on it - with that seating's party and the
-     * moment it sat down (all three null when the table has no seating).
+     * One tables row: its number, its seats, its section and the seating on it - with that seating's party, the
+     * moment it sat down and the moment it left (all null when the table has no seating).
      */
-    public record Row(
-            long id, String no, int seats, Section section, Long currentSeatingId, Long partyId,
-            Instant seatedAt) {}
+    public record Row(long id, String no, int seats, Section section, Long currentSeatingId, Long partyId,
+            Instant seatedAt, Instant leftAt) {
+    }
 
     private static final String SELECT = """
-            SELECT t.id, t.no, t.seats, t.section, t.current_seating_id, s.party_id, s.seated_at
+            SELECT t.id, t.no, t.seats, t.section, t.current_seating_id, s.party_id, s.seated_at, s.left_at
             FROM tables t LEFT JOIN seatings s ON s.id = t.current_seating_id
             WHERE t.branch_id = ?""";
 
@@ -49,6 +49,12 @@ public class TableRepository {
     public void seat(long tableId, long seatingId) {
         jdbc.sql("UPDATE tables SET current_seating_id = ? WHERE id = ?")
                 .params(seatingId, tableId).update();
+    }
+/** Cleared: the table holds no seating again. */
+    public void clear(long tableId, Instant clearedAt) {
+        jdbc.sql("UPDATE tables SET current_seating_id = NULL, cleared_at = ? WHERE id = ?")
+                .params(clearedAt, tableId)
+                .update();
     }
 
     public void insert(long branchId, String no, int seats, Section section) {

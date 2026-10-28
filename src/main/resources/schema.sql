@@ -33,28 +33,3 @@ CREATE TABLE IF NOT EXISTS parties (
     quoted_at      TIMESTAMP WITH TIME ZONE NOT NULL,
     waited_minutes INT
 );
-
--- A party at a table. left_at, cleared_at and turn_minutes are filled when the party leaves and the table is
--- cleared; tables.current_seating_id points here while the seating is on the floor.
-CREATE TABLE IF NOT EXISTS seatings (
-    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-    branch_id    BIGINT                   NOT NULL REFERENCES branches (id),
-    party_id     BIGINT                   NOT NULL REFERENCES parties (id),
-    table_id     BIGINT                   NOT NULL REFERENCES tables (id),
-    seated_at    TIMESTAMP WITH TIME ZONE NOT NULL,
-    left_at      TIMESTAMP WITH TIME ZONE,
-    cleared_at   TIMESTAMP WITH TIME ZONE,
-    turn_minutes INT
-);
-
--- The append-only log of every transition. The app only inserts and reads it (EventLog has nothing else);
--- data holds the event's facts as JSON - ids and numbers, never a phone number.
-CREATE TABLE IF NOT EXISTS events (
-    id         BIGINT AUTO_INCREMENT PRIMARY KEY,
-    branch_id  BIGINT                   NOT NULL REFERENCES branches (id),
-    party_id   BIGINT                   NOT NULL REFERENCES parties (id),
-    seating_id BIGINT REFERENCES seatings (id),
-    kind       VARCHAR(10)              NOT NULL,
-    at         TIMESTAMP WITH TIME ZONE NOT NULL,
-    data       VARCHAR(2000)            NOT NULL
-);

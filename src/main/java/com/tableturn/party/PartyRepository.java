@@ -2,26 +2,23 @@ package com.tableturn.party;
 
 import java.time.Instant;
 import java.util.Optional;
+
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-/**
- * The parties table.
- */
+/** The parties table. */
 @Repository
 public class PartyRepository {
 
-    /**
-     * One party as the screens show it (the phone number is never shown); waitedMinutes and the table it sits at are
-     * null until it is seated.
-     */
+    /** One party as the screens show it (the phone number is never shown); waitedMinutes is null until seated. */
     public record Row(long id, String name, int covers, String state, int position, Instant joinedAt,
-                      int quotedMinutes, Instant quotedAt, Integer waitedMinutes, String table) {
+                      int quotedMinutes, Instant quotedAt, Integer waitedMinutes) {
     }
 
     private final JdbcClient jdbc;
+
     public PartyRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
@@ -32,72 +29,23 @@ public class PartyRepository {
      */
     public long insert(long branchId, String name, int covers, String phone, Instant joinedAt, int quotedMinutes) {
         KeyHolder key = new GeneratedKeyHolder();
-
         jdbc.sql("""
                         INSERT INTO parties (branch_id, name, covers, phone, state, joined_at, position,
                                              quoted_minutes, quoted_at)
                         SELECT ?, ?, ?, ?, 'waiting', ?, 1 + COUNT(*), ?, ?
-                        FROM parties
-                        WHERE branch_id = ? AND state = 'waiting'
-                        """)
+                        FROM parties WHERE branch_id = ? AND state = 'waiting'""")
                 .params(branchId, name, covers, phone, joinedAt, quotedMinutes, joinedAt, branchId)
                 .update(key, "id");
-
         return key.getKeyAs(Long.class);
     }
 
     public Optional<Row> find(long branchId, long id) {
         return jdbc.sql("""
-                        SELECT p.id, p.name, p.covers, p.state, p.position, p.joined_at, p.quoted_minutes,
-                               p.quoted_at, p.waited_minutes, t.no AS "table"
-                        FROM parties p
-                        LEFT JOIN seatings s ON s.party_id = p.id
-                        LEFT JOIN tables t ON t.id = s.table_id
-                        WHERE p.branch_id = ? AND p.id = ?
-                        """).params(branchId, id).query(Row.class)
-                .optional();
+                        SELECT id, name, covers, state, position, joined_at, quoted_minutes, quoted_at, waited_minutes
+                        FROM parties WHERE branch_id = ? AND id = ?""")
+                .params(branchId, id).query(Row.class).optional();
     }
-   
-    /**
-     * The first party still waiting that has more covers than this one and would fit a table of these seats.
-     */
-    public Optional<Long> firstLargerWaiting(long branchId, int covers, int seats) {
-        return jdbc.sql(
-                        """
-                        SELECT id
-                        FROM parties
-                        WHERE branch_id = ?
-                        AND state = 'waiting'
-                        AND covers > ?
-                        AND covers <= ?
-                        ORDER BY joined_at, id
-                        LIMIT 1""")
-                .params(branchId, covers, seats)
-                .query(Long.class)
-                .optional();
-    }
-
-    public void markSeated(long id) {
-        jdbc.sql("UPDATE parties SET state = 'seated' WHERE id = ?")
-                .param(id)
-                .update();
-    }
-
-    public void markLeft(long id) {
-        jdbc.sql("UPDATE parties SET state = 'left' WHERE id = ?")
-                .param(id)
-                .update();
-    }
-
-    public void markCleared(long id) {
-        jdbc.sql("UPDATE parties SET state = 'cleared' WHERE id = ?")
-                .param(id)
-                .update();
-    }
-
-    /**
-     * The real wait, written once when the party is seated.
-     */
+    /** The real wait, written once when the party is seated. */
     public void stampWait(long id, int waitedMinutes) {
         jdbc.sql("UPDATE parties SET waited_minutes = ? WHERE id = ?")
                 .params(waitedMinutes, id)

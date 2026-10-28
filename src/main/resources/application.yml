@@ -1,20 +1,15 @@
-# Every setting can come from the environment: an env-file passed to `docker run --env-file` is the only
-# configuration input. DATABASE_URL, HOST and PORT are mapped here; DEFAULT_QUOTE_MINUTES and SMALL_PARTY_UPGRADE
-# bind to default-quote-minutes and small-party-upgrade through Spring's relaxed binding.
-
 spring:
   application:
     name: tableturn
   datasource:
-    url: ${DATABASE_URL:jdbc:h2:file:./data/tableturn}
+    url: jdbc:h2:file:./data/tableturn
   sql:
     init:
       mode: always
 
 server:
-  address: ${HOST:127.0.0.1}
-  port: ${PORT:8080}
+  address: 127.0.0.1
+  port: 8080
 
 default-quote-minutes: 40
-small-party-upgrade: when_nobody_larger_waits
 seed-dir: seed

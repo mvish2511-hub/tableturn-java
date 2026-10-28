@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -15,12 +17,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * The append-only log. It can add an event and read a party's events - nothing else, so nothing in the app can
  * change or remove one. Called inside the transaction of the change it records, so a rolled-back change leaves no
  * event behind. The facts are ids and numbers, never the guest's phone.
+ * Every event also leaves one log line on stdout - its kind, the party and its facts.
  */
 @Repository
 public class EventLog {
 
     private record Row(Instant at, String kind, String data) {
     }
+
+    private static final Logger log = LoggerFactory.getLogger("com.tableturn.events");
 
     private final JdbcClient jdbc;
     private final ObjectMapper json;
@@ -29,12 +34,13 @@ public class EventLog {
         this.jdbc = jdbc;
         this.json = json;
     }
-
     /** One event; seatingId is null for the events before a seating exists (joined, quoted). */
     public void append(long branchId, long partyId, Long seatingId, String kind, Instant at,
                        Map<String, Object> facts) {
         jdbc.sql("INSERT INTO events (branch_id, party_id, seating_id, kind, at, data) VALUES (?, ?, ?, ?, ?, ?)")
                 .params(branchId, partyId, seatingId, kind, at, write(facts)).update();
+   
+    log.info("event kind={}, partyId={}, facts={}", kind, PartyIds.format(partyId), facts);
     }
 
     /** A party's events, oldest first. */
@@ -44,7 +50,7 @@ public class EventLog {
                 .map(r -> new EventView(r.at(), r.kind(), read(r.data()))).toList();
     }
 
-        private String write(Map<String, Object> facts) {
+    private String write(Map<String, Object> facts) {
         try {
             return json.writeValueAsString(facts);
         } catch (JsonProcessingException e) {
